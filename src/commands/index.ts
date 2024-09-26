@@ -125,35 +125,44 @@ export class Commander {
     }
 }
 
-const readdir = (dir: string): Promise<string[]> => {
-    return new Promise((resolve, reject) => {
-        fs.readdir(dir, (err, files) => {
-            if (err) reject(err)
-            resolve(files)
-        })
-    })
-}
-
 export default (): Promise<Commander> => {
     return new Promise((resolve, reject) => {
         const commander = new Commander()
 
         // Load commands
-        readdir(path.join(__dirname))
-            .then((files) => {
-                for (const file of files) {
-                    if (file !== 'index.js') {
-                        try {
-                            // eslint-disable-next-line @typescript-eslint/no-var-requires
-                            require(`./${file}`).default(commander)
-                        } catch (err) {
-                            reject(err)
-                        }
+        const files: string[] = []
+
+        const findFilesInDirectory = (dir: string) => {
+            return new Promise((resolve, reject) => {
+                fs.readdir(dir, (err, files) => {
+                    if (err) throw err
+
+                    files.forEach(async (file) => {
+                        const abs = path.join(dir, file)
+                        fs.stat(abs, async (err, stats) => {
+                            if (err) throw err
+
+                            if (stats.isDirectory()) return await findFilesInDirectory(abs)
+                            else files.push(abs)
+                        })
+                    })
+                })
+            })
+        }
+
+        findFilesInDirectory(__dirname).then(() => {
+            for (const file of files) {
+                if (file !== __filename) {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        require(`${file}`).default(commander)
+                    } catch (err) {
+                        reject(err)
                     }
                 }
+            }
 
-                resolve(commander)
-            })
-            .catch(reject)
+            resolve(commander)
+        })
     })
 }
